@@ -2797,6 +2797,13 @@ function filterPostaNadadores() {
     return true;
   });
 
+  // Nadadores ya inscriptos en OTRA posta de esta misma prueba (no se pueden repetir)
+  const usedNadIds = new Set(
+    STATE.inscripciones
+      .filter(i => i.eventoId === currentEventId && i.pruebaId === pruebaId && i.isPosta && i.clubId === clubId)
+      .map(i => i.nadadorId)
+  );
+
   const el = document.getElementById('postaNadadoresList');
   if (nads.length === 0) {
     el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:12px">No se encontraron nadadores con estos filtros.</p>';
@@ -2806,7 +2813,18 @@ function filterPostaNadadores() {
   el.innerHTML = '<table><thead><tr><th></th><th>Nadador</th><th>Sexo</th><th>Edad</th><th>Categoría</th></tr></thead><tbody>' +
     nads.map(n => {
       const isSelected = postaSelectedNadadores.some(s => s.id === n.id);
+      const isUsed = usedNadIds.has(n.id);
       const sexoLabel = n.sexo === 'M' ? 'Masc' : 'Fem';
+      if (isUsed) {
+        // Ya está en otra posta de esta prueba: se muestra tachado y no seleccionable
+        return `<tr style="opacity:0.45;cursor:not-allowed" title="Ya inscripto en otra posta de esta prueba">
+          <td><input type="checkbox" disabled style="pointer-events:none"></td>
+          <td style="text-decoration:line-through"><strong>${displayNadName(n)}</strong> <span class="badge badge-red" style="text-decoration:none">Ya en posta</span></td>
+          <td><span class="badge ${n.sexo==='M'?'badge-cyan':'badge-gold'}">${sexoLabel}</span></td>
+          <td>${n.edad || '-'}</td>
+          <td>${n.categoriaNombre || '-'}</td>
+        </tr>`;
+      }
       return `<tr style="${isSelected?'background:rgba(0,212,255,0.1)':''};cursor:pointer" onclick="togglePostaNadador('${n.id}')">
         <td><input type="checkbox" ${isSelected?'checked':''} style="pointer-events:none"></td>
         <td><strong>${displayNadName(n)}</strong></td>
@@ -2885,7 +2903,7 @@ function savePostaInscripcion() {
     }
   });
 
-  saveState('series');
+  saveState('inscripciones');
   closeModal('modalPosta');
   renderInscripciones();
   toast('Posta inscripta correctamente');
@@ -3320,9 +3338,13 @@ function renderResultadosPorPrueba() {
       <table><thead><tr><th>Pos</th><th>Nadador</th><th>Club</th><th>Marca</th><th>Tiempo</th><th>Dif</th><th>Pts</th></tr></thead><tbody>`;
 
     results.forEach((t, idx) => {
-      const nad = STATE.nadadores.find(n => n.id === t.nadadorId);
-      const ins = STATE.inscripciones.find(i => i.eventoId===currentEventId && i.pruebaId===pr.id && i.nadadorId===t.nadadorId);
+      // En postas, t.nadadorId es la lista de los 4 IDs separados por coma
+      const nadIds = String(t.nadadorId).split(',');
+      const ins = STATE.inscripciones.find(i => i.eventoId===currentEventId && i.pruebaId===pr.id && i.nadadorId===nadIds[0]);
       const club = ins ? STATE.clubes.find(c => c.id === ins.clubId) : null;
+      const nombreDisplay = pr.tipo === 'posta'
+        ? nadIds.map(id => displayNadName(STATE.nadadores.find(n => n.id === id))).join(' / ')
+        : displayNadName(STATE.nadadores.find(n => n.id === nadIds[0]));
       const marca = ins?.tiempoMark ? `${String(ins.tiempoMark.min).padStart(2,'0')}:${String(ins.tiempoMark.seg).padStart(2,'0')}.${String(ins.tiempoMark.cent).padStart(2,'0')}` : 'S/T';
       const tiempo = `${String(t.min).padStart(2,'0')}:${String(t.seg).padStart(2,'0')}.${String(t.cent).padStart(2,'0')}`;
       const puntos = (STATE.puntos[idx+1] || 0) * (pr.tipo === 'posta' ? 2 : 1);
@@ -3331,7 +3353,7 @@ function renderResultadosPorPrueba() {
 
       html += `<tr>
         <td><strong>${posIcon}</strong></td>
-        <td><strong>${displayNadName(nad)}</strong></td>
+        <td><strong>${nombreDisplay}</strong></td>
         <td>${club?club.abrev:'-'}</td>
         <td style="color:var(--text-muted)">${marca}</td>
         <td><strong style="color:var(--accent-cyan)">${tiempo}</strong></td>
@@ -3362,7 +3384,9 @@ function renderRankingClubes() {
     const results = tiempos.filter(t => !dqIds.has(t.nadadorId)).sort((a,b) => a.total - b.total);
 
     results.forEach((t, idx) => {
-      const ins = STATE.inscripciones.find(i => i.eventoId===currentEventId && i.pruebaId===pr.id && i.nadadorId===t.nadadorId);
+      // En postas, t.nadadorId son los 4 IDs separados por coma: el club se toma del primero
+      const firstNadId = String(t.nadadorId).split(',')[0];
+      const ins = STATE.inscripciones.find(i => i.eventoId===currentEventId && i.pruebaId===pr.id && i.nadadorId===firstNadId);
       if (!ins) return;
       const pts = (STATE.puntos[idx+1] || 0) * (pr.tipo === 'posta' ? 2 : 1);
       if (!clubPoints[ins.clubId]) clubPoints[ins.clubId] = { total: 0, golds: 0, silvers: 0, bronzes: 0 };
