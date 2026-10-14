@@ -850,7 +850,7 @@ tr:hover td { background: rgba(0,212,255,0.03); }
         <div class="card">
           <div class="card-header">
             <h3>📋 Programa de Pruebas</h3>
-            <button class="btn btn-primary btn-sm no-print" onclick="openModal('modalPrueba')">+ Agregar Prueba</button>
+            <button class="btn btn-primary btn-sm no-print" onclick="openPruebaModal()">+ Agregar Prueba</button>
           </div>
           <div class="wave-divider"></div>
           <div id="pruebasList"></div>
@@ -1783,6 +1783,7 @@ function saveCategoria() {
   saveState('categorias');
   closeModal('modalCategoria');
   renderCategorias();
+  populatePruebaCategoriasChips();
   // Clear
   document.getElementById('catNombre').value = '';
 }
@@ -1813,6 +1814,7 @@ function deleteCat(id) {
   STATE.categorias = STATE.categorias.filter(c => c.id !== id);
   saveState('categorias');
   renderCategorias();
+  populatePruebaCategoriasChips();
   toast('Categoría eliminada');
 }
 
@@ -1839,6 +1841,25 @@ function updatePruebaDistancias() {
   } else {
     sel.innerHTML = '<option>25</option><option>50</option><option>100</option><option>200</option><option>400</option><option>800</option><option>1500</option>';
   }
+}
+
+function openPruebaModal() {
+  const modal = document.getElementById('modalPrueba');
+  // Salir del modo edición (evita sobrescribir una prueba previamente editada)
+  delete modal.dataset.editId;
+  const h2 = modal.querySelector('h2');
+  if (h2) h2.textContent = '📋 Agregar Prueba';
+  // Reset de campos a valores por defecto
+  document.getElementById('prTipo').value = 'individual';
+  updatePruebaDistancias();
+  document.getElementById('prDistancia').value = '50';
+  document.getElementById('prEstilo').value = 'Libre';
+  document.getElementById('prSexo').value = 'M';
+  const count = STATE.pruebas.filter(p => p.eventoId === currentEventId).length;
+  document.getElementById('prOrden').value = count + 1;
+  // SIEMPRE re-armar los chips con las categorías del evento ACTUAL
+  populatePruebaCategoriasChips();
+  openModal('modalPrueba');
 }
 
 function savePrueba() {
@@ -1940,7 +1961,10 @@ function editPrueba(id) {
       if (chip) chip.classList.add('selected');
     });
   }, 50);
-  document.getElementById('modalPrueba').dataset.editId = id;
+  const modal = document.getElementById('modalPrueba');
+  const h2 = modal.querySelector('h2');
+  if (h2) h2.textContent = '📋 Editar Prueba';
+  modal.dataset.editId = id;
   openModal('modalPrueba');
 }
 
