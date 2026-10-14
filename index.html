@@ -889,7 +889,7 @@ tr:hover td { background: rgba(0,212,255,0.03); }
           <div class="card-header">
             <h3>📝 Inscripción de Nadadores</h3>
             <div class="flex-row no-print">
-              <button class="btn btn-primary btn-sm" onclick="openModal('modalInscripcion')">+ Inscribir Nadador</button>
+              <button class="btn btn-primary btn-sm" onclick="openInscripcionModal()">+ Inscribir Nadador</button>
               <button class="btn btn-warning btn-sm" onclick="openModalPosta()">🏊‍♂️🏊‍♀️ Inscribir Posta</button>
               <button class="btn btn-danger btn-sm" onclick="borrarTodasInscripciones()">🗑 Borrar Todas</button>
             </div>
@@ -2106,8 +2106,14 @@ document.getElementById('insSexo').addEventListener('change', function() {
   }
 });
 
-// Populate club select on modal open
-document.getElementById('modalInscripcion').addEventListener('transitionend', populateInsModal);
+// Abrir el modal de inscripción poblándolo una sola vez (antes se usaba
+// 'transitionend', que se disparaba con cualquier transición CSS interna
+// —p. ej. el hover del botón Inscribir— y reconstruía la lista borrando
+// los checkboxes ya tildados).
+function openInscripcionModal() {
+  populateInsModal();
+  openModal('modalInscripcion');
+}
 
 function populateInsModal() {
   // Clubs
@@ -2140,11 +2146,15 @@ function renderInsPruebas() {
     el.innerHTML = '<p style="color:var(--text-muted)">Primero cargá pruebas en el programa.</p>';
     return;
   }
-  el.innerHTML = prs.map(p => `
+  el.innerHTML = prs.map(p => {
+    const sx = p.sexo === 'M' ? 'Masc' : p.sexo === 'F' ? 'Fem' : 'Mixto';
+    const sxClass = p.sexo === 'M' ? 'badge-cyan' : p.sexo === 'F' ? 'badge-gold' : 'badge-green';
+    const dist = p.tipo === 'posta' ? p.distancia : p.distancia + 'm';
+    return `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:8px;background:var(--bg-input);border-radius:6px">
       <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer">
         <input type="checkbox" class="ins-prueba-check" data-prueba-id="${p.id}">
-        <span style="font-size:13px"><strong>${p.distancia}m ${p.estilo}</strong> (${p.tipo})</span>
+        <span style="font-size:13px"><strong>${dist} ${p.estilo}</strong> <span class="badge ${sxClass}" style="font-size:10px">${sx}</span> <span style="color:var(--text-muted)">(${p.tipo})</span></span>
       </label>
       <div style="display:flex;align-items:center;gap:4px">
         <span style="font-size:11px;color:var(--text-muted)">Tiempo:</span>
@@ -2155,7 +2165,8 @@ function renderInsPruebas() {
         <input type="number" class="ins-tiempo-cent" style="width:40px;text-align:center" placeholder="cc" min="0" max="99">
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function saveInscripcion() {
