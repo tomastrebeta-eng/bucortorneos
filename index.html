@@ -2150,11 +2150,15 @@ function renderInsPruebas() {
     const sx = p.sexo === 'M' ? 'Masc' : p.sexo === 'F' ? 'Fem' : 'Mixto';
     const sxClass = p.sexo === 'M' ? 'badge-cyan' : p.sexo === 'F' ? 'badge-gold' : 'badge-green';
     const dist = p.tipo === 'posta' ? p.distancia : p.distancia + 'm';
+    const catNames = (p.categorias||[]).map(cid => {
+      const cat = STATE.categorias.find(c=>c.id===cid);
+      return cat ? cat.nombre : '?';
+    }).join(', ');
     return `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:8px;background:var(--bg-input);border-radius:6px">
       <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer">
         <input type="checkbox" class="ins-prueba-check" data-prueba-id="${p.id}">
-        <span style="font-size:13px"><strong>${dist} ${p.estilo}</strong> <span class="badge ${sxClass}" style="font-size:10px">${sx}</span> <span style="color:var(--text-muted)">(${p.tipo})</span></span>
+        <span style="font-size:13px"><strong>${dist} ${p.estilo}</strong> <span class="badge ${sxClass}" style="font-size:10px">${sx}</span> <span style="color:var(--text-muted)">(${p.tipo})</span><span style="color:var(--accent-cyan);font-size:11px"> · ${catNames || 'Todas'}</span></span>
       </label>
       <div style="display:flex;align-items:center;gap:4px">
         <span style="font-size:11px;color:var(--text-muted)">Tiempo:</span>
