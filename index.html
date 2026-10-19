@@ -1348,6 +1348,24 @@ let saveTimeout = null;
 let realtimeListeners = []; // track active listeners
 let suppressRealtimeUpdate = false; // prevent echo on own writes
 
+// "Sombra" de lo último que sabemos que está en Firestore (por colección):
+// Map(docId -> JSON de los datos). Permite guardar SOLO lo que cambió, en vez
+// de reescribir toda la colección. Clave para no agotar la cuota de Firebase y
+// para no pisar datos cargados por otras PC (solo se borra lo borrado a propósito).
+let syncedShadow = {};
+function serializeDoc(item) {
+  const data = { ...item };
+  delete data._docId;
+  return JSON.stringify(data);
+}
+function rebuildShadow(col) {
+  const m = new Map();
+  (STATE[col] || []).forEach(item => {
+    m.set(item._docId || item.id, serializeDoc(item));
+  });
+  syncedShadow[col] = m;
+}
+
 // Load all state from Firestore on startup
 async function loadState() {
   try {
@@ -1357,6 +1375,7 @@ async function loadState() {
       snap.forEach(doc => {
         STATE[col].push({ ...doc.data(), _docId: doc.id });
       });
+      rebuildShadow(col);
     }
     // Load puntos config
     const puntosDoc = await db.collection(FB_PREFIX + 'config').doc('puntos').get();
@@ -1393,6 +1412,10 @@ function startRealtimeListeners() {
       snap.forEach(doc => {
         STATE[col].push({ ...doc.data(), _docId: doc.id });
       });
+      // La sombra queda igual al estado autoritativo de Firestore, así el
+      // próximo guardado local no reescribe lo que ya está y no intenta
+      // borrar documentos agregados por otras PC.
+      rebuildShadow(col);
 
       // Re-render affected views
       refreshViews(col);
@@ -1512,33 +1535,39 @@ async function flushSaveQueue() {
 
     try {
       const fbCol = db.collection(FB_PREFIX + col);
-
-      // Get current docs in Firestore
-      const snap = await fbCol.get();
-      const existingIds = new Set();
-      snap.forEach(doc => existingIds.add(doc.id));
+      const shadow = syncedShadow[col] || (syncedShadow[col] = new Map());
+      const stateItems = STATE[col] || [];
 
       const batch = db.batch();
-      const stateItems = STATE[col] || [];
       const stateIds = new Set();
+      let ops = 0;
 
-      // Upsert all current state items
+      // Escribir SOLO los documentos nuevos o modificados (comparando contra la sombra)
       stateItems.forEach(item => {
         const docId = item._docId || item.id;
         stateIds.add(docId);
         const data = { ...item };
         delete data._docId;
-        batch.set(fbCol.doc(docId), data);
-      });
-
-      // Delete items that are in Firestore but not in state
-      existingIds.forEach(id => {
-        if (!stateIds.has(id)) {
-          batch.delete(fbCol.doc(id));
+        const json = JSON.stringify(data);
+        if (shadow.get(docId) !== json) {
+          batch.set(fbCol.doc(docId), data);
+          shadow.set(docId, json);
+          ops++;
         }
       });
 
-      await batch.commit();
+      // Borrar SOLO lo que estaba en la sombra y ya no está en el estado
+      // (es decir, lo que ESTA PC borró a propósito). No toca documentos que
+      // esta PC nunca conoció, por lo que no pisa cargas de otras PC.
+      for (const docId of [...shadow.keys()]) {
+        if (!stateIds.has(docId)) {
+          batch.delete(fbCol.doc(docId));
+          shadow.delete(docId);
+          ops++;
+        }
+      }
+
+      if (ops > 0) await batch.commit();
     } catch(e) {
       console.error(`Error syncing ${col}:`, e);
       firestoreReady = false;
