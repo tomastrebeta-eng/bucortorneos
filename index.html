@@ -3447,18 +3447,46 @@ function renderRankingClubes() {
     return;
   }
 
-  let html = '<div class="card"><h3 style="font-family:\'Barlow Condensed\';color:var(--accent-gold);font-size:18px;margin-bottom:12px">🏆 RANKING DE CLUBES</h3>';
-  html += '<table><thead><tr><th>Pos</th><th>Club</th><th>🥇</th><th>🥈</th><th>🥉</th><th>Puntos</th></tr></thead><tbody>';
+  const maxTotal = sorted[0][1].total || 1;
+  const hora = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  const medalColors = ['#ffd700', '#c8d0e0', '#cd7f32'];   // oro, plata, bronce
+  const medalRGB    = ['255,215,0', '200,208,224', '205,127,50'];
+
+  let html = `
+  <div class="card" style="padding:clamp(16px,2.4vw,34px)">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:clamp(14px,2vw,26px)">
+      <h3 style="font-family:'Barlow Condensed';color:var(--accent-gold);font-size:clamp(24px,3.6vw,50px);letter-spacing:1px;margin:0;line-height:1">🏆 RANKING DE CLUBES</h3>
+      <span style="color:var(--text-muted);font-size:clamp(11px,1.1vw,16px)">Actualizado ${hora} · se refresca cada 30s</span>
+    </div>`;
+
   sorted.forEach(([clubId, data], idx) => {
     const club = STATE.clubes.find(c => c.id === clubId);
-    html += `<tr>
-      <td><strong>${idx+1}°</strong></td>
-      <td><strong>${club?club.nombre:'-'}</strong></td>
-      <td>${data.golds}</td><td>${data.silvers}</td><td>${data.bronzes}</td>
-      <td><span class="badge badge-gold" style="font-size:14px">${data.total}</span></td>
-    </tr>`;
+    const nombre = club ? club.nombre : '-';
+    const isTop = idx < 3;
+    const pct = Math.max(6, Math.round(data.total / maxTotal * 100));
+    const rowBg = isTop
+      ? `linear-gradient(90deg, rgba(${medalRGB[idx]},0.16), var(--bg-input))`
+      : 'var(--bg-input)';
+    const posStyle = isTop
+      ? `background:${medalColors[idx]};color:#0a1628`
+      : 'background:var(--bg-card);color:var(--accent-cyan);border:2px solid var(--border)';
+    html += `
+    <div style="position:relative;overflow:hidden;border-radius:14px;margin-bottom:clamp(8px,1.1vw,14px);border:1px solid ${isTop?`rgba(${medalRGB[idx]},0.55)`:'var(--border)'};background:${rowBg}">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:linear-gradient(90deg, ${isTop?`rgba(${medalRGB[idx]},0.14)`:'rgba(0,212,255,0.10)'}, transparent);z-index:0"></div>
+      <div style="position:relative;z-index:1;display:flex;align-items:center;gap:clamp(12px,2vw,28px);padding:clamp(10px,1.5vw,20px) clamp(14px,2vw,28px)">
+        <div style="flex:0 0 auto;width:clamp(44px,4.6vw,78px);height:clamp(44px,4.6vw,78px);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:clamp(20px,2.6vw,40px);${posStyle}">${idx+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:'Barlow Condensed';font-weight:700;font-size:clamp(20px,3vw,44px);color:#fff;line-height:1.05">${nombre}</div>
+          <div style="font-size:clamp(13px,1.5vw,24px);color:var(--text-secondary);margin-top:4px">🥇 ${data.golds} &nbsp;&nbsp; 🥈 ${data.silvers} &nbsp;&nbsp; 🥉 ${data.bronzes}</div>
+        </div>
+        <div style="flex:0 0 auto;text-align:right">
+          <div style="font-family:'Barlow Condensed';font-weight:800;font-size:clamp(32px,4.8vw,72px);color:var(--accent-gold);line-height:1">${data.total}</div>
+          <div style="font-size:clamp(10px,1vw,16px);color:var(--text-muted);letter-spacing:2px;text-transform:uppercase">puntos</div>
+        </div>
+      </div>
+    </div>`;
   });
-  html += '</tbody></table></div>';
+  html += '</div>';
   el.innerHTML = html;
 }
 
