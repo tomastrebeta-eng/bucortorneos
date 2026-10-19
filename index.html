@@ -1583,6 +1583,7 @@ function startSession(userObj) {
   document.getElementById('currentUserDisplay').textContent = `👤 ${userObj.usuario} (${userObj.rol})`;
   renderAll();
   startRealtimeListeners();
+  startResultadosAutoRefresh();
 }
 
 function restoreSession() {
@@ -3320,6 +3321,32 @@ function showResTab(tab) {
   if (tab === 'resPruebas') renderResultadosPorPrueba();
   if (tab === 'resClub') renderRankingClubes();
   if (tab === 'resDashboard') renderDashboard();
+}
+
+// ============================================================
+// AUTO-REFRESH de Resultados (pantallas en vivo del evento)
+// Cada 30s re-renderiza el sub-tab de Resultados que esté visible
+// (Por Prueba / Ranking Clubes / Dashboard) para que las pantallas
+// del público y los nadadores muestren los datos actualizados.
+// ============================================================
+let resultadosAutoRefreshTimer = null;
+function startResultadosAutoRefresh() {
+  if (resultadosAutoRefreshTimer) return;
+  resultadosAutoRefreshTimer = setInterval(refreshResultadosSiVisible, 30000);
+}
+function refreshResultadosSiVisible() {
+  try {
+    if (!currentEventId) return;
+    const sub = document.getElementById('sub-resultados');
+    if (!sub || sub.style.display === 'none') return; // solo si la pestaña Resultados está abierta
+    const activeRes = document.querySelector('#resultadosSubTabs .sub-tab.active');
+    const tab = activeRes ? activeRes.dataset.restab : 'resPruebas';
+    const scrollY = window.scrollY; // preservar posición para no saltar en la pantalla
+    if (tab === 'resClub') renderRankingClubes();
+    else if (tab === 'resDashboard') renderDashboard();
+    else renderResultadosPorPrueba();
+    window.scrollTo(0, scrollY);
+  } catch (e) { /* ignorar errores durante el refresco automático */ }
 }
 
 function renderResultados() {
