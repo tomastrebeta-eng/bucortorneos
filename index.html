@@ -1613,6 +1613,7 @@ function startSession(userObj) {
   renderAll();
   startRealtimeListeners();
   startResultadosAutoRefresh();
+  startRankingClock();
 }
 
 function restoreSession() {
@@ -3363,6 +3364,19 @@ function startResultadosAutoRefresh() {
   if (resultadosAutoRefreshTimer) return;
   resultadosAutoRefreshTimer = setInterval(refreshResultadosSiVisible, 30000);
 }
+
+// Reloj digital del Ranking: tiquea cada segundo sin re-renderizar el ranking
+function relojAhora() {
+  return new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
+}
+let rankingClockTimer = null;
+function startRankingClock() {
+  if (rankingClockTimer) return;
+  rankingClockTimer = setInterval(() => {
+    const el = document.getElementById('rankingClock');
+    if (el) el.textContent = relojAhora();
+  }, 1000);
+}
 function refreshResultadosSiVisible() {
   try {
     if (!currentEventId) return;
@@ -3471,22 +3485,29 @@ function renderRankingClubes() {
   const sorted = Object.entries(clubPoints).sort((a,b) => b[1].total - a[1].total);
   const el = document.getElementById('resClub');
 
-  if (sorted.length === 0) {
-    el.innerHTML = '<p style="color:var(--text-muted);padding:20px">No hay datos de ranking.</p>';
-    return;
-  }
-
-  const maxTotal = sorted[0][1].total || 1;
-  const hora = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  const maxTotal = sorted.length ? (sorted[0][1].total || 1) : 1;
   const medalColors = ['#ffd700', '#c8d0e0', '#cd7f32'];   // oro, plata, bronce
   const medalRGB    = ['255,215,0', '200,208,224', '205,127,50'];
 
   let html = `
+  <style>@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.25}}</style>
   <div class="card" style="padding:clamp(16px,2.4vw,34px)">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:clamp(14px,2vw,26px)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:clamp(14px,2vw,26px)">
       <h3 style="font-family:'Barlow Condensed';color:var(--accent-gold);font-size:clamp(24px,3.6vw,50px);letter-spacing:1px;margin:0;line-height:1">🏆 RANKING DE CLUBES</h3>
-      <span style="color:var(--text-muted);font-size:clamp(11px,1.1vw,16px)">Actualizado ${hora} · se refresca cada 30s</span>
+      <div style="text-align:right">
+        <div id="rankingClock" style="font-family:'Barlow Condensed',monospace;font-variant-numeric:tabular-nums;font-weight:800;font-size:clamp(34px,5.2vw,80px);color:var(--accent-cyan);line-height:1;letter-spacing:3px;text-shadow:0 0 18px rgba(0,212,255,0.45);padding:clamp(4px,.6vw,10px) clamp(10px,1.4vw,22px);border:2px solid rgba(0,212,255,0.35);border-radius:12px;background:rgba(0,0,0,0.25)">${relojAhora()}</div>
+        <div style="margin-top:6px;font-size:clamp(10px,1vw,15px);color:var(--text-muted);letter-spacing:1px">
+          <span style="display:inline-block;width:.7em;height:.7em;border-radius:50%;background:var(--accent-red);vertical-align:middle;animation:livePulse 1.2s infinite"></span>
+          <span style="color:var(--accent-red);font-weight:700">EN VIVO</span> · se refresca cada 30s
+        </div>
+      </div>
     </div>`;
+
+  if (sorted.length === 0) {
+    // Sin resultados todavía: se muestra igual el encabezado con el reloj
+    el.innerHTML = html + `<p style="color:var(--text-muted);font-size:clamp(14px,1.6vw,24px);padding:20px;text-align:center">Todavía no hay resultados cargados.</p></div>`;
+    return;
+  }
 
   sorted.forEach(([clubId, data], idx) => {
     const club = STATE.clubes.find(c => c.id === clubId);
