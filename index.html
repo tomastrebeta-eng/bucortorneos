@@ -2095,13 +2095,21 @@ function limpiarDatosPrueba() {
   if (!currentEventId) return;
   const ev = STATE.eventos.find(e => e.id === currentEventId);
 
-  const nadCount = STATE.nadadores.length;
+  // Con resultados reales cargados no se puede limpiar (protege el torneo en curso)
+  const hayResultados = STATE.tiempos.some(t => t.eventoId === currentEventId && t.total > 0 && tieneInscripcion(t))
+    || STATE.dqs.some(d => d.eventoId === currentEventId && tieneInscripcion(d));
+  if (hayResultados) return toast('Este evento ya tiene resultados cargados: no se puede limpiar', 'error');
+
+  // Solo se borran los nadadores que no estén inscriptos en otro evento
+  const nadOtrosEventos = new Set(STATE.inscripciones.filter(i => i.eventoId !== currentEventId).map(i => i.nadadorId));
+  const nadCount = STATE.nadadores.filter(n => !nadOtrosEventos.has(n.id)).length;
   const insCount = STATE.inscripciones.filter(i => i.eventoId === currentEventId).length;
 
   if (!confirm(`¿Limpiar datos de prueba del evento "${ev ? ev.nombre : ''}"?\n\nSe borrarán:\n• ${nadCount} nadadores\n• ${insCount} inscripciones\n• Series, tiempos y descalificaciones\n\nSe conservan: clubes, pruebas y categorías.`)) return;
-  if (!confirm('¿Estás seguro? Esta acción no se puede deshacer.')) return;
+  const confirmacion = prompt('Esta acción no se puede deshacer.\n\nPara confirmar, escribí BORRAR:');
+  if ((confirmacion || '').trim().toUpperCase() !== 'BORRAR') return toast('Limpieza cancelada: no se borró nada', 'error');
 
-  STATE.nadadores = [];
+  STATE.nadadores = STATE.nadadores.filter(n => nadOtrosEventos.has(n.id));
   STATE.inscripciones = STATE.inscripciones.filter(i => i.eventoId !== currentEventId);
   STATE.series = STATE.series.filter(s => s.eventoId !== currentEventId);
   STATE.tiempos = STATE.tiempos.filter(t => t.eventoId !== currentEventId);
