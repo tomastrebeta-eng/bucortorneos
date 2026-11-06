@@ -947,6 +947,14 @@ tr:hover td { background: rgba(0,212,255,0.03); }
             <button class="sub-tab" data-restab="resDashboard" onclick="showResTab('resDashboard')">Dashboard</button>
           </div>
 
+          <div class="flex-row no-print" id="resPruebasImprimir" style="margin-bottom:16px">
+            <span style="font-size:13px;color:var(--text-secondary)">Imprimir pruebas</span>
+            <span style="font-size:13px;color:var(--text-secondary)">desde</span>
+            <input type="number" id="imprimirDesde" min="1" placeholder="1ª" style="width:80px;text-align:center">
+            <span style="font-size:13px;color:var(--text-secondary)">hasta</span>
+            <input type="number" id="imprimirHasta" min="1" placeholder="última" style="width:80px;text-align:center">
+            <button class="btn btn-primary btn-sm" onclick="imprimirRangoPruebas()">🖨 Imprimir rango</button>
+          </div>
           <div id="resPruebas"></div>
           <div id="resClub" style="display:none"></div>
           <div id="resDashboard" style="display:none"></div>
@@ -3381,6 +3389,7 @@ function showResTab(tab) {
   ['resPruebas','resClub','resDashboard'].forEach(id => {
     document.getElementById(id).style.display = id === tab ? 'block' : 'none';
   });
+  document.getElementById('resPruebasImprimir').style.display = tab === 'resPruebas' ? 'flex' : 'none';
   if (tab === 'resPruebas') renderResultadosPorPrueba();
   if (tab === 'resClub') renderRankingClubes();
   if (tab === 'resDashboard') renderDashboard();
@@ -3456,7 +3465,7 @@ function renderResultadosPorPrueba() {
       return serie ? c.id === serie.categoriaId : false;
     });
 
-    html += `<div class="card" style="margin-bottom:16px">
+    html += `<div class="card" data-orden="${pr.orden}" style="margin-bottom:16px">
       <h3 style="font-family:'Barlow Condensed';color:var(--accent-gold);font-size:16px;margin-bottom:8px">
         🏆 PRUEBA ${pr.orden}: ${distLabel(pr)}${pr.estilo} ${cat?'— '+cat.nombre:''} ${pr.tipo==='posta'?'<span class="badge badge-gold">POSTA x2</span>':''}
       </h3>
@@ -3497,6 +3506,23 @@ function renderResultadosPorPrueba() {
   });
 
   el.innerHTML = html || '<p style="color:var(--text-muted);padding:20px">No hay resultados para mostrar.</p>';
+}
+
+// Imprime solo las pruebas del rango; las demás se esconden únicamente en el papel
+function imprimirRangoPruebas() {
+  const desde = parseInt(document.getElementById('imprimirDesde').value) || 1;
+  const hasta = parseInt(document.getElementById('imprimirHasta').value) || Infinity;
+  if (desde > hasta) return toast('"Desde" no puede ser mayor que "hasta"', 'error');
+
+  const cards = [...document.querySelectorAll('#resPruebas .card[data-orden]')];
+  const enRango = c => { const o = parseInt(c.dataset.orden); return o >= desde && o <= hasta; };
+  if (!cards.some(enRango)) return toast('No hay pruebas en ese rango', 'error');
+
+  cards.forEach(c => c.classList.toggle('no-print', !enRango(c)));
+  window.addEventListener('afterprint', () => {
+    document.querySelectorAll('#resPruebas .card.no-print').forEach(c => c.classList.remove('no-print'));
+  }, { once: true });
+  window.print();
 }
 
 function renderRankingClubes() {
