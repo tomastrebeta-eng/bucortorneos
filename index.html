@@ -919,7 +919,10 @@ tr:hover td { background: rgba(0,212,255,0.03); }
         <div class="card">
           <div class="card-header">
             <h3>⏱ Desarrollo del Evento - Carga de Tiempos</h3>
-            <button class="btn btn-outline btn-sm no-print" onclick="window.print()">🖨 Imprimir Planillas</button>
+            <div class="flex-row no-print">
+              <button class="btn btn-warning btn-sm" id="btnRankingOculto" onclick="toggleRankingOculto()">🙈 Ocultar Ranking</button>
+              <button class="btn btn-outline btn-sm" onclick="window.print()">🖨 Imprimir Planillas</button>
+            </div>
           </div>
           <div class="wave-divider"></div>
           <div id="desarrolloList"></div>
@@ -1446,6 +1449,11 @@ function refreshViews(col) {
     switch(col) {
       case 'eventos':
         if (!currentEventId) renderEventList();
+        else {
+          // Puede haber cambiado el ocultamiento del ranking desde otra PC
+          actualizarBotonRanking();
+          refreshResultadosSiVisible();
+        }
         break;
       case 'clubes':
         renderClubList();
@@ -1770,6 +1778,7 @@ function openEvento(id) {
   renderPruebas();
   renderCategorias();
   renderInscripciones();
+  actualizarBotonRanking();
 }
 
 function backToEvents() {
@@ -3540,11 +3549,16 @@ function renderRankingClubes() {
     return;
   }
 
+  // Momento de definición: se dibujan filas fantasma, sin los datos reales,
+  // para que el desenfoque no deje adivinar quién va adelante.
+  const oculto = !!STATE.eventos.find(e => e.id === currentEventId)?.rankingOculto;
+  if (oculto) html += `<div style="position:relative;min-height:clamp(260px,38vw,520px)"><div style="filter:blur(8px);opacity:.55;pointer-events:none;user-select:none">`;
+
   sorted.forEach(([clubId, data], idx) => {
     const club = STATE.clubes.find(c => c.id === clubId);
-    const nombre = club ? club.nombre : '-';
+    const nombre = oculto ? '????????????' : (club ? club.nombre : '-');
     const isTop = idx < 3;
-    const pct = Math.max(6, Math.round(data.total / maxTotal * 100));
+    const pct = oculto ? 100 : Math.max(6, Math.round(data.total / maxTotal * 100));
     const rowBg = isTop
       ? `linear-gradient(90deg, rgba(${medalRGB[idx]},0.16), var(--bg-input))`
       : 'var(--bg-input)';
@@ -3558,17 +3572,45 @@ function renderRankingClubes() {
         <div style="flex:0 0 auto;width:clamp(44px,4.6vw,78px);height:clamp(44px,4.6vw,78px);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:clamp(20px,2.6vw,40px);${posStyle}">${idx+1}</div>
         <div style="flex:1;min-width:0">
           <div style="font-family:'Barlow Condensed';font-weight:700;font-size:clamp(20px,3vw,44px);color:#fff;line-height:1.05">${nombre}</div>
-          <div style="font-size:clamp(13px,1.5vw,24px);color:var(--text-secondary);margin-top:4px">🥇 ${data.golds} &nbsp;&nbsp; 🥈 ${data.silvers} &nbsp;&nbsp; 🥉 ${data.bronzes}</div>
+          <div style="font-size:clamp(13px,1.5vw,24px);color:var(--text-secondary);margin-top:4px">🥇 ${oculto?'?':data.golds} &nbsp;&nbsp; 🥈 ${oculto?'?':data.silvers} &nbsp;&nbsp; 🥉 ${oculto?'?':data.bronzes}</div>
         </div>
         <div style="flex:0 0 auto;text-align:right">
-          <div style="font-family:'Barlow Condensed';font-weight:800;font-size:clamp(32px,4.8vw,72px);color:var(--accent-gold);line-height:1">${data.total}</div>
+          <div style="font-family:'Barlow Condensed';font-weight:800;font-size:clamp(32px,4.8vw,72px);color:var(--accent-gold);line-height:1">${oculto?'???':data.total}</div>
           <div style="font-size:clamp(10px,1vw,16px);color:var(--text-muted);letter-spacing:2px;text-transform:uppercase">puntos</div>
         </div>
       </div>
     </div>`;
   });
+  if (oculto) {
+    html += `</div>
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:16px">
+      <div style="font-size:clamp(40px,6vw,90px);line-height:1;animation:livePulse 1.6s infinite">⏳</div>
+      <div style="font-family:'Bebas Neue';color:var(--accent-gold);font-size:clamp(38px,7vw,110px);letter-spacing:4px;line-height:1.05;margin-top:12px;text-shadow:0 0 24px rgba(255,215,0,0.45)">MOMENTO DE DEFINICIÓN</div>
+      <div style="color:#fff;font-size:clamp(15px,2vw,30px);margin-top:12px">El resultado final se devela al terminar la prueba</div>
+    </div></div>`;
+  }
   html += '</div>';
   el.innerHTML = html;
+}
+
+// Ocultar/develar el ranking en todas las pantallas. Se guarda en el evento
+// para que llegue a las demás sesiones; solo afecta a la vista de Ranking.
+function toggleRankingOculto() {
+  const ev = STATE.eventos.find(e => e.id === currentEventId);
+  if (!ev) return;
+  if (!firestoreReady) return toast('Sin conexión con Firebase: las pantallas no recibirían el cambio', 'error');
+  const ocultar = !ev.rankingOculto;
+  if (!ocultar && !confirm('¿Develar el ranking en todas las pantallas?')) return;
+  ev.rankingOculto = ocultar;
+  saveState('eventos');
+  actualizarBotonRanking();
+  refreshResultadosSiVisible();
+  toast(ocultar ? 'Ranking oculto en todas las pantallas' : 'Ranking develado en todas las pantallas');
+}
+
+function actualizarBotonRanking() {
+  const ev = STATE.eventos.find(e => e.id === currentEventId);
+  document.getElementById('btnRankingOculto').textContent = ev?.rankingOculto ? '🎉 Develar Ranking' : '🙈 Ocultar Ranking';
 }
 
 function renderDashboard() {
