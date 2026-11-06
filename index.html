@@ -1966,10 +1966,11 @@ function renderPruebas() {
 
 function deletePrueba(id) {
   if (!confirm('¿Eliminar esta prueba?')) return;
-  if (!confirm('¿Estás seguro? También se eliminarán las inscripciones asociadas.')) return;
+  if (!confirm('¿Estás seguro? También se eliminarán las inscripciones, tiempos y descalificaciones asociados.')) return;
   STATE.pruebas = STATE.pruebas.filter(p => p.id !== id);
   STATE.inscripciones = STATE.inscripciones.filter(i => i.pruebaId !== id);
-  saveState(['pruebas','inscripciones']);
+  borrarResultados(r => r.pruebaId === id);
+  saveState(['pruebas','inscripciones','tiempos','dqs']);
   renderPruebas();
   renderInscripciones();
   toast('Prueba eliminada');
@@ -2049,12 +2050,26 @@ function renderClubList() {
     }).join('') + '</tbody></table></div>';
 }
 
+// Borra los tiempos y DQ que cumplan la condición. Se llama al eliminar
+// nadadores o pruebas, para no dejar resultados sin dueño.
+function borrarResultados(cond) {
+  STATE.tiempos = STATE.tiempos.filter(t => !cond(t));
+  STATE.dqs = STATE.dqs.filter(d => !cond(d));
+}
+
+// En postas, nadadorId son los 4 IDs separados por coma
+function esDeNadadores(r, nadIds) {
+  return String(r.nadadorId).split(',').some(id => nadIds.has(id));
+}
+
 function deleteClub(id) {
   if (!confirm('¿Eliminar este club y todos sus nadadores?')) return;
+  const nadIds = new Set(STATE.nadadores.filter(n => n.clubId === id).map(n => n.id));
   STATE.clubes = STATE.clubes.filter(c => c.id !== id);
   STATE.nadadores = STATE.nadadores.filter(n => n.clubId !== id);
   STATE.inscripciones = STATE.inscripciones.filter(i => i.clubId !== id);
-  saveState(['clubes','nadadores','inscripciones']);
+  borrarResultados(r => esDeNadadores(r, nadIds));
+  saveState(['clubes','nadadores','inscripciones','tiempos','dqs']);
   renderClubList();
   toast('Club eliminado');
 }
@@ -2062,15 +2077,16 @@ function deleteClub(id) {
 function borrarNadadoresClub(clubId) {
   const club = STATE.clubes.find(c => c.id === clubId);
   const nadCount = STATE.nadadores.filter(n => n.clubId === clubId).length;
-  if (!confirm(`¿Borrar los ${nadCount} nadadores de ${club ? club.nombre : 'este club'}?\n\nSe eliminarán también sus inscripciones.`)) return;
+  if (!confirm(`¿Borrar los ${nadCount} nadadores de ${club ? club.nombre : 'este club'}?\n\nSe eliminarán también sus inscripciones, tiempos y descalificaciones.`)) return;
 
   // Get IDs of nadadores to remove
   const nadIds = new Set(STATE.nadadores.filter(n => n.clubId === clubId).map(n => n.id));
 
   STATE.nadadores = STATE.nadadores.filter(n => n.clubId !== clubId);
   STATE.inscripciones = STATE.inscripciones.filter(i => !nadIds.has(i.nadadorId));
+  borrarResultados(r => esDeNadadores(r, nadIds));
 
-  saveState(['nadadores','inscripciones']);
+  saveState(['nadadores','inscripciones','tiempos','dqs']);
   renderClubList();
   toast(`${nadCount} nadadores eliminados de ${club ? club.nombre : 'club'}`);
 }
@@ -3396,14 +3412,21 @@ function renderResultados() {
   renderResultadosPorPrueba();
 }
 
+// Un tiempo o DQ solo cuenta si su nadador (en postas, el primero) está inscripto
+// en esa prueba. Los que quedaron sin dueño no se muestran ni ocupan puestos.
+function tieneInscripcion(r) {
+  const firstNadId = String(r.nadadorId).split(',')[0];
+  return STATE.inscripciones.some(i => i.eventoId===r.eventoId && i.pruebaId===r.pruebaId && i.nadadorId===firstNadId);
+}
+
 function renderResultadosPorPrueba() {
   const pruebas = STATE.pruebas.filter(p => p.eventoId === currentEventId).sort((a,b)=>a.orden-b.orden);
   const el = document.getElementById('resPruebas');
   let html = '';
 
   pruebas.forEach(pr => {
-    const tiempos = STATE.tiempos.filter(t => t.eventoId===currentEventId && t.pruebaId===pr.id && t.total > 0);
-    const dqs = STATE.dqs.filter(d => d.eventoId===currentEventId && d.pruebaId===pr.id);
+    const tiempos = STATE.tiempos.filter(t => t.eventoId===currentEventId && t.pruebaId===pr.id && t.total > 0 && tieneInscripcion(t));
+    const dqs = STATE.dqs.filter(d => d.eventoId===currentEventId && d.pruebaId===pr.id && tieneInscripcion(d));
     const dqIds = new Set(dqs.map(d => d.nadadorId));
 
     // Sort by time (fastest first), exclude DQ
@@ -3449,8 +3472,8 @@ function renderResultadosPorPrueba() {
 
     // DQs
     dqs.forEach(dq => {
-      const nad = STATE.nadadores.find(n => n.id === dq.nadadorId);
-      html += `<tr style="opacity:0.5"><td>-</td><td>${displayNadName(nad)}</td><td>-</td><td>-</td><td><span class="badge badge-red">DQ</span></td><td>-</td><td>0</td></tr>`;
+      const nombre = String(dq.nadadorId).split(',').map(id => displayNadName(STATE.nadadores.find(n => n.id === id))).join(' / ');
+      html += `<tr style="opacity:0.5"><td>-</td><td>${nombre}</td><td>-</td><td>-</td><td><span class="badge badge-red">DQ</span></td><td>-</td><td>0</td></tr>`;
     });
 
     html += '</tbody></table></div>';
@@ -3464,7 +3487,7 @@ function renderRankingClubes() {
   const clubPoints = {};
 
   pruebas.forEach(pr => {
-    const tiempos = STATE.tiempos.filter(t => t.eventoId===currentEventId && t.pruebaId===pr.id && t.total > 0);
+    const tiempos = STATE.tiempos.filter(t => t.eventoId===currentEventId && t.pruebaId===pr.id && t.total > 0 && tieneInscripcion(t));
     const dqIds = new Set(STATE.dqs.filter(d => d.eventoId===currentEventId && d.pruebaId===pr.id).map(d=>d.nadadorId));
     const results = tiempos.filter(t => !dqIds.has(t.nadadorId)).sort((a,b) => a.total - b.total);
 
@@ -3546,8 +3569,8 @@ function renderDashboard() {
   const prCount = STATE.pruebas.filter(p => p.eventoId === currentEventId).length;
   const nadIds = [...new Set(STATE.inscripciones.filter(i=>i.eventoId===currentEventId).map(i=>i.nadadorId))];
   const clubIds = [...new Set(STATE.inscripciones.filter(i=>i.eventoId===currentEventId).map(i=>i.clubId))];
-  const tiemposCount = STATE.tiempos.filter(t => t.eventoId === currentEventId && t.total > 0).length;
-  const dqCount = STATE.dqs.filter(d => d.eventoId === currentEventId).length;
+  const tiemposCount = STATE.tiempos.filter(t => t.eventoId === currentEventId && t.total > 0 && tieneInscripcion(t)).length;
+  const dqCount = STATE.dqs.filter(d => d.eventoId === currentEventId && tieneInscripcion(d)).length;
 
   let html = `
     <div class="grid-4" style="margin-bottom:24px">
